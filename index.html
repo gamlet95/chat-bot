@@ -12,7 +12,8 @@
     <div id="chat" style="border:1px solid #ddd; border-radius:8px; padding:12px; min-height:320px;"></div>
 
     <div style="display:flex; gap:8px; margin-top:12px;">
-      <input id="msg" style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px;"
+      <input id="msg"
+             style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px;"
              placeholder="Escribe aquí..." />
       <button id="send" style="padding:10px 14px;">Enviar</button>
       <button id="reset" style="padding:10px 14px;">Nueva sesión</button>
@@ -29,30 +30,42 @@
     row.style.padding = "6px 0";
     row.innerHTML = `<b>${role}:</b> ${String(text).replaceAll("\n","<br/>")}`;
     document.getElementById("chat").appendChild(row);
+    row.scrollIntoView({ behavior: "smooth", block: "end" });
   }
 
   async function send() {
     const input = document.getElementById("msg");
     const message = input.value.trim();
     if (!message) return;
+
     input.value = "";
     add("Tú", message);
 
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ message, sessionId: sessionId || undefined })
-    });
+    try {
+      // IMPORTANTÍSIMO:
+      // Usamos text/plain para evitar el preflight CORS de Apps Script.
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ message, sessionId: sessionId || undefined })
+      });
 
-    const data = await res.json();
-    if (!data.ok) {
-      add("Sistema", "Error: " + (data.error || "unknown"));
-      return;
+      const data = await res.json();
+
+      if (!data.ok) {
+        add("Sistema", "Error: " + (data.error || "unknown"));
+        if (data.details) add("Sistema", JSON.stringify(data.details));
+        return;
+      }
+
+      sessionId = data.sessionId || "";
+      if (sessionId) localStorage.setItem(storageKey, sessionId);
+
+      add("Emily", data.reply || "(sin respuesta)");
+    } catch (err) {
+      add("Sistema", "Error de red en el navegador. Revisa conexión o URL del Script.");
+      add("Sistema", String(err));
     }
-
-    sessionId = data.sessionId;
-    localStorage.setItem(storageKey, sessionId);
-    add("Emily", data.reply || "(sin respuesta)");
   }
 
   function resetSession() {
@@ -66,6 +79,8 @@
   document.getElementById("msg").addEventListener("keydown", (e) => {
     if (e.key === "Enter") send();
   });
+
+  add("Sistema", "Listo. Escribe un mensaje y pulsa Enviar.");
 </script>
 </body>
 </html>
